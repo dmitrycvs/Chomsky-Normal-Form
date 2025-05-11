@@ -61,30 +61,22 @@ class Grammar:
 
 ```python
 def _eliminate_epsilon_productions(self, vn, productions):
-    # Find all nullable symbols
+    # Identify nullable non-terminals
     nullable = set()
-    changed = True
-    
-    while changed:
-        changed = False
-        for non_terminal in vn:
-            if non_terminal not in nullable and non_terminal in productions:
-                for production in productions[non_terminal]:
-                    if production == "ε":
-                        nullable.add(non_terminal)
-                        changed = True
-                    elif all(symbol in nullable for symbol in production):
-                        nullable.add(non_terminal)
-                        changed = True
-    
-    # Generate new productions without ε
-    for non_terminal in vn:
-        if non_terminal in productions:
-            new_productions = []
-            for production in productions[non_terminal]:
-                if production != "ε":
-                    self._add_all_combinations(production, nullable, new_productions)
-            productions[non_terminal] = list(set(new_productions))
+    while True:
+        updated = {nt for nt in vn if nt not in nullable and nt in productions
+                   and any(p == "ε" or all(s in nullable for s in p) for p in productions[nt])}
+        if not updated: break
+        nullable |= updated
+
+    # Rebuild productions without ε
+    for nt in vn:
+        if nt in productions:
+            new_prods = []
+            for p in productions[nt]:
+                if p != "ε":
+                    self._add_all_combinations(p, nullable, new_prods)
+            productions[nt] = list(set(new_prods))
 ```
 
 **Key Features**:
@@ -96,35 +88,23 @@ def _eliminate_epsilon_productions(self, vn, productions):
 
 ```python
 def _eliminate_unit_productions(self, vn, productions):
-    # Find all unit pairs (A →* B)
     unit_pairs = {nt: {nt} for nt in vn}
-    changed = True
-    
-    while changed:
-        changed = False
+    while True:
+        updated = False
         for a in vn:
             for b in list(unit_pairs[a]):
-                if b in productions:
-                    for production in productions[b]:
-                        if len(production) == 1 and production in vn:
-                            c = production
-                            if c not in unit_pairs[a]:
-                                unit_pairs[a].add(c)
-                                changed = True
-    
-    # Replace unit productions with their expansions
-    new_productions = {}
-    for non_terminal in vn:
-        non_unit_productions = []
-        for unit_nt in unit_pairs[non_terminal]:
-            if unit_nt in productions:
-                for production in productions[unit_nt]:
-                    if not (len(production) == 1 and production in vn):
-                        non_unit_productions.append(production)
-        new_productions[non_terminal] = list(set(non_unit_productions))
-    
-    productions.clear()
-    productions.update(new_productions)
+                unit_prods = [p[0] for p in productions.get(b, []) if len(p) == 1 and p[0] in vn]
+                for c in unit_prods:
+                    if c not in unit_pairs[a]:
+                        unit_pairs[a].add(c)
+                        updated = True
+        if not updated: break
+
+    productions.update({
+        nt: list({p for u in unit_pairs[nt] for p in productions.get(u, [])
+                  if not (len(p) == 1 and p[0] in vn)})
+        for nt in vn
+    })
 ```
 
 **Key Features**:
